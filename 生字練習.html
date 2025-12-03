@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>生字書寫練習</title>
+<style>
+  body {
+    font-family: sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow-x: hidden;
+  }
+
+  #input-area { padding: 10px; border-bottom: 1px solid #ccc; }
+  #words-container { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .word-item { padding: 6px 10px; background: #eee; cursor: pointer; border-radius: 6px; font-size: 20px; }
+  .selected-word { background: #ffd27f; }
+
+  #main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #tools { width: 120px; border-right: 1px solid #ccc; padding: 10px; }
+
+  .color-swatch { width: 30px; height: 30px; border-radius: 50%; margin: 8px 0; cursor: pointer; border: 1px solid #999; }
+  #thickness { width: 100%; margin-top: 20px; }
+
+  #write-area {
+    flex: 1;
+    display: flex;
+    justify-content: flex-start;
+    gap: 20px;
+    align-items: center;
+    padding: 20px;
+    position: relative;
+    margin-right: 140px; /* 預留給右側便利貼 */
+  }
+
+  .square { width: 250px; height: 250px; border: 2px solid #444; position: relative; background: white; }
+  .grid { position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+          background-image: linear-gradient(#ccc 1px, transparent 1px), 
+                            linear-gradient(90deg, #ccc 1px, transparent 1px); 
+          background-size: 100% 50%, 50% 100%; pointer-events: none; z-index:10; }
+  .guide-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ccc; font-size: 160px; pointer-events: none; font-family: "標楷體","DFKai-SB"; z-index:20; }
+  .sticky-note { background:rgb(255,255,150); cursor:move; padding:8px; border-radius:6px; opacity:1; pointer-events:auto;}
+  .drawing { position:absolute; top:0; left:0; width:100%; height:100%; z-index:5000; pointer-events:auto; }
+
+  /* 固定便利貼選單，右側固定且完整顯示 */
+  #sticky-menu {
+    position: fixed;
+    top: 20px;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index:3000;
+    width: 140px;  /* 固定寬度 */
+    padding-right: 10px;
+  }
+
+  #sticky-menu .sticky-note {
+    position: relative; /* 改成 relative 保持選單排列 */
+    z-index:3001; /* 保證在右側選單上方 */
+  }
+</style>
+</head>
+<body>
+
+<div id="input-area">
+  <label>輸入生字（最多20個）：</label>
+  <input type="text" id="word-input" maxlength="20" />
+  <button onclick="addWords()">加入</button>
+  <div id="words-container"></div>
+</div>
+
+<div id="main">
+  <div id="tools">
+    <div>顏色</div>
+    <div class="color-swatch" style="background:red" onclick="setColor('red')"></div>
+    <div class="color-swatch" style="background:blue" onclick="setColor('blue')"></div>
+    <div class="color-swatch" style="background:green" onclick="setColor('green')"></div>
+    <div class="color-swatch" style="background:black" onclick="setColor('black')"></div>
+    <br>
+    <button onclick="setColor('eraser')" style="margin-top:10px; width:100%">橡皮擦</button>
+    <div>筆粗細</div>
+    <input id="thickness" type="range" min="1" max="20" value="5" onchange="setThickness(this.value)">
+  </div>
+
+  <div id="write-area">
+    <div class="square">
+      <div class="grid"></div>
+      <div class="guide-text" id="g1"></div>
+      <canvas class="drawing" width="250" height="250"></canvas>
+    </div>
+    <div class="square">
+      <div class="grid"></div>
+      <div class="guide-text" id="g2"></div>
+      <canvas class="drawing" width="250" height="250"></canvas>
+    </div>
+    <div class="square">
+      <div class="grid"></div>
+      <div class="guide-text" id="g3"></div>
+      <canvas class="drawing" width="250" height="250"></canvas>
+    </div>
+  </div>
+</div>
+
+<button onclick="clearCanvas()" style="position:absolute; left:20px; bottom:20px; padding:10px 20px; z-index:2000;">清除畫筆</button>
+
+<div id="sticky-menu">
+  <div class="sticky-note small" style="width:60px; height:60px;"></div>
+  <div class="sticky-note medium" style="width:80px; height:80px;"></div>
+  <div class="sticky-note large" style="width:110px; height:110px;"></div>
+</div>
+
+<button onclick="clearStickyNotes()" style="position:absolute; right:20px; bottom:20px; padding:10px 20px; z-index:2000;">清除便利貼</button>
+
+<script>
+let selected = [];
+let currentColor = 'black';
+let erasing = false;
+let currentThickness = 5;
+
+function addWords() {
+  const input = document.getElementById('word-input');
+  const chars = input.value.trim().split('');
+  const container = document.getElementById('words-container');
+  container.innerHTML = '';
+  chars.slice(0, 20).forEach(ch => {
+    const span = document.createElement('span');
+    span.className = 'word-item';
+    span.textContent = ch;
+    span.onclick = function () {
+      if (span.classList.contains('selected-word')) {
+        span.classList.remove('selected-word');
+        selected = selected.filter(c => c !== ch);
+      } else if (selected.length < 3) {
+        span.classList.add('selected-word');
+        selected.push(ch);
+      }
+      updateGuideText();
+    };
+    container.appendChild(span);
+  });
+}
+
+function updateGuideText() {
+  const ids = ['g1','g2','g3'];
+  for (let i=0;i<3;i++){
+    document.getElementById(ids[i]).textContent = selected[i] || '';
+  }
+}
+
+function setColor(c){ currentColor = c; erasing = (c==='eraser'); }
+function setThickness(t){ currentThickness = t; }
+
+// 畫筆支援滑鼠和觸控
+document.querySelectorAll('.drawing').forEach(canvas => {
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+
+  function startDraw(x, y){ drawing = true; ctx.beginPath(); ctx.moveTo(x,y); }
+  function draw(x,y){
+    if(!drawing) return;
+    ctx.lineWidth=currentThickness;
+    ctx.lineCap='round';
+    ctx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+    ctx.strokeStyle=currentColor;
+    ctx.lineTo(x,y);
+    ctx.stroke();
+  }
+  function endDraw(){ drawing=false; }
+
+  canvas.addEventListener('mousedown', e=>startDraw(e.offsetX,e.offsetY));
+  canvas.addEventListener('mousemove', e=>draw(e.offsetX,e.offsetY));
+  canvas.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('mouseleave', endDraw);
+
+  canvas.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    const rect=canvas.getBoundingClientRect();
+    const touch=e.touches[0];
+    startDraw(touch.clientX-rect.left, touch.clientY-rect.top);
+  });
+  canvas.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    const rect=canvas.getBoundingClientRect();
+    const touch=e.touches[0];
+    draw(touch.clientX-rect.left, touch.clientY-rect.top);
+  });
+  canvas.addEventListener('touchend', e=>{ e.preventDefault(); endDraw(); });
+});
+
+// 便利貼拖曳 (clone 後仍可拖動)
+function makeDraggable(originalEl, cloneOnDrag=false){
+  let isDown=false;
+  let offsetX=0, offsetY=0;
+
+  function pointerDown(e){
+    e.preventDefault();
+    let el=originalEl;
+
+    if(cloneOnDrag){
+      const clone = originalEl.cloneNode(true);
+      clone.style.position='absolute';
+      const rect = originalEl.getBoundingClientRect();
+      clone.style.left = rect.left + 'px';
+      clone.style.top = rect.top + 'px';
+      clone.style.zIndex=4000;
+      clone.classList.add('generated-sticky');
+      document.body.appendChild(clone);
+
+      makeDraggable(clone,false); // clone 可再次拖動
+      el=clone;
+    }
+
+    const rect=el.getBoundingClientRect();
+    const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
+    isDown=true;
+
+    function pointerMove(ev){
+      if(!isDown) return;
+      const moveX = ev.type.startsWith('touch') ? ev.touches[0].clientX : ev.clientX;
+      const moveY = ev.type.startsWith('touch') ? ev.touches[0].clientY : ev.clientY;
+      el.style.left=(moveX-offsetX)+'px';
+      el.style.top=(moveY-offsetY)+'px';
+    }
+
+    function pointerUp(){
+      isDown=false;
+      document.removeEventListener('mousemove', pointerMove);
+      document.removeEventListener('mouseup', pointerUp);
+      document.removeEventListener('touchmove', pointerMove);
+      document.removeEventListener('touchend', pointerUp);
+    }
+
+    document.addEventListener('mousemove', pointerMove);
+    document.addEventListener('mouseup', pointerUp);
+    document.addEventListener('touchmove', pointerMove,{passive:false});
+    document.addEventListener('touchend', pointerUp);
+  }
+
+  originalEl.addEventListener('mousedown', pointerDown);
+  originalEl.addEventListener('touchstart', pointerDown,{passive:false});
+}
+
+document.querySelectorAll('#sticky-menu .sticky-note').forEach(note=>{ makeDraggable(note,true); });
+
+function clearCanvas(){
+  document.querySelectorAll('.drawing').forEach(c=>{
+    const ctx=c.getContext('2d');
+    ctx.clearRect(0,0,c.width,c.height);
+  });
+}
+
+function clearStickyNotes(){ document.querySelectorAll('.generated-sticky').forEach(n=>n.remove()); }
+</script>
+</body>
+</html>
