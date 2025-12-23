@@ -76,6 +76,7 @@
   <label>輸入生字（最多20個）：</label>
   <input type="text" id="word-input" maxlength="20" />
   <button onclick="addWords()">加入</button>
+  <button onclick="toggleCandidates()" id="toggle-btn" style="margin-left: 10px;">隱藏候選字</button>
   <div id="words-container"></div>
 </div>
 
@@ -148,6 +149,28 @@ function addWords() {
     };
     container.appendChild(span);
   });
+  
+  // 加入生字後，如果當前是隱藏狀態，自動顯示出來方便選擇
+  const containerStyle = window.getComputedStyle(container);
+  if (containerStyle.display === 'none') {
+      toggleCandidates();
+  }
+}
+
+// 新增功能：切換候選字顯示/隱藏
+function toggleCandidates() {
+  const container = document.getElementById('words-container');
+  const btn = document.getElementById('toggle-btn');
+  
+  // 檢查目前的顯示狀態
+  // 注意：雖然 CSS 寫 display: flex，但 js 直接讀取 style.display 可能是空字串，所以要判斷 'none'
+  if (container.style.display === 'none') {
+    container.style.display = 'flex';
+    btn.textContent = '隱藏候選字';
+  } else {
+    container.style.display = 'none';
+    btn.textContent = '顯示候選字';
+  }
 }
 
 function updateGuideText() {
